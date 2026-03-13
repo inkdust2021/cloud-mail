@@ -373,7 +373,11 @@ const emailService = {
 		const { noRecipient  } = await settingService.query(c);
 
 		//查询所有收件人账号信息
-		let accountList = await orm(c).select().from(account).where(inArray(account.email, receiveEmail)).all();
+		let accountList = await orm(c)
+			.select()
+			.from(account)
+			.where(and(inArray(account.email, receiveEmail), eq(account.isDel, isDel.NORMAL)))
+			.all();
 
 		//查询所有收件人权限身份
 		const userIds = accountList.map(accountRow => accountRow.userId);
@@ -755,8 +759,8 @@ const emailService = {
 	},
 
 	async completeReceiveAll(c) {
-		await c.env.db.prepare(`UPDATE email as e SET status = ${emailConst.status.RECEIVE} WHERE status = ${emailConst.status.SAVING} AND EXISTS (SELECT 1 FROM account WHERE account_id = e.account_id)`).run();
-		await c.env.db.prepare(`UPDATE email as e SET status = ${emailConst.status.NOONE} WHERE status = ${emailConst.status.SAVING} AND NOT EXISTS (SELECT 1 FROM account WHERE account_id = e.account_id)`).run();
+		await c.env.db.prepare(`UPDATE email as e SET status = ${emailConst.status.RECEIVE} WHERE status = ${emailConst.status.SAVING} AND EXISTS (SELECT 1 FROM account WHERE account_id = e.account_id AND is_del = ${isDel.NORMAL})`).run();
+		await c.env.db.prepare(`UPDATE email as e SET status = ${emailConst.status.NOONE} WHERE status = ${emailConst.status.SAVING} AND NOT EXISTS (SELECT 1 FROM account WHERE account_id = e.account_id AND is_del = ${isDel.NORMAL})`).run();
 	},
 
 	async batchDelete(c, params) {

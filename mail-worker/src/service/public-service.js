@@ -14,6 +14,8 @@ import { isDel, roleConst } from '../const/entity-const';
 import email from '../entity/email';
 import userService from './user-service';
 import KvConst from '../const/kv-const';
+import constant from '../const/constant';
+import tempMailboxService from './temp-mailbox-service';
 
 const publicService = {
 
@@ -169,6 +171,39 @@ const publicService = {
 		await c.env.kv.put(KvConst.PUBLIC_KEY, uuid);
 
 		return {token: uuid}
+	},
+
+	async batchCreateEmails(c, params) {
+		tempMailboxService.parseCreateParams(c, params);
+		const remainingCalls = await this.consumePublicApiQuota(c);
+		const emails = await tempMailboxService.batchCreate(c, params);
+
+		return {
+			success: true,
+			created_count: emails.length,
+			emails,
+			remaining_calls: remainingCalls
+		};
+	},
+
+	async getMessagesByAddress(c, address) {
+		await tempMailboxService.requireActiveMailbox(c, address);
+		await this.consumePublicApiQuota(c);
+		return tempMailboxService.listMessagesByAddress(c, address);
+	},
+
+	async consumePublicApiQuota(c) {
+		const dateKey = dayjs().format('YYYY-MM-DD');
+		const quotaKey = `${KvConst.PUBLIC_API_USAGE}${dateKey}`;
+		const usedCalls = Number(await c.env.kv.get(quotaKey) || 0);
+
+		if (usedCalls >= constant.PUBLIC_API_DAILY_LIMIT) {
+			throw new BizError(t('publicApiQuotaExceeded'), 429);
+		}
+
+		const nextUsedCalls = usedCalls + 1;
+		await c.env.kv.put(quotaKey, String(nextUsedCalls), { expirationTtl: 60 * 60 * 48 });
+		return constant.PUBLIC_API_DAILY_LIMIT - nextUsedCalls;
 	},
 
 	async verifyUser(c, params) {

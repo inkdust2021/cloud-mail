@@ -5,6 +5,7 @@ import verifyRecordService from './service/verify-record-service';
 import emailService from './service/email-service';
 import kvObjService from './service/kv-obj-service';
 import oauthService from "./service/oauth-service";
+import tempMailboxService from './service/temp-mailbox-service';
 export default {
 	 async fetch(req, env, ctx) {
 
@@ -26,6 +27,7 @@ export default {
 	async scheduled(c, env, ctx) {
 		await verifyRecordService.clearRecord({ env })
 		await userService.resetDaySendCount({ env })
+		await tempMailboxService.clearExpired({ env })
 		await emailService.completeReceiveAll({ env })
 		await oauthService.clearNoBindOathUser({ env })
 	},

@@ -16,3 +16,13 @@ app.post('/public/addUser', async (c) => {
 	await publicService.addUser(c, await c.req.json());
 	return c.json(result.ok());
 });
+
+app.post('/public/batch-create-emails', async (c) => {
+	const data = await publicService.batchCreateEmails(c, await c.req.json());
+	return c.json(data);
+});
+
+app.get('/public/emails/:address/messages', async (c) => {
+	const list = await publicService.getMessagesByAddress(c, c.req.param('address'));
+	return c.json(list);
+});

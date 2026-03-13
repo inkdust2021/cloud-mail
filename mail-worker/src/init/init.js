@@ -28,8 +28,31 @@ const dbInit = {
 		await this.v2_7DB(c);
 		await this.v2_8DB(c);
 		await this.v2_9DB(c);
+		await this.v3DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
+	},
+
+	async v3DB(c) {
+		try {
+			await c.env.db.batch([
+				c.env.db.prepare(`CREATE TABLE IF NOT EXISTS temp_mailbox (
+					mailbox_id INTEGER PRIMARY KEY AUTOINCREMENT,
+					user_id INTEGER NOT NULL,
+					account_id INTEGER NOT NULL,
+					address TEXT NOT NULL,
+					pin_code TEXT NOT NULL,
+					expires_at TEXT NOT NULL,
+					create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
+					is_del INTEGER NOT NULL DEFAULT 0
+				)`),
+				c.env.db.prepare(`CREATE UNIQUE INDEX IF NOT EXISTS idx_temp_mailbox_address_nocase ON temp_mailbox(address COLLATE NOCASE)`),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_temp_mailbox_account_id ON temp_mailbox(account_id)`),
+				c.env.db.prepare(`CREATE INDEX IF NOT EXISTS idx_temp_mailbox_expires_at ON temp_mailbox(expires_at)`)
+			]);
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
 	},
 
 	async v2_9DB(c) {

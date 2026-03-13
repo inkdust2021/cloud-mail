@@ -60,7 +60,7 @@
 
 - **🔔 邮件推送**：接收邮件后可以转发到TG机器人或其他服务商邮箱
 
-- **📡 开放API**：支持使用API批量生成用户，多条件查询邮件 
+- **📡 开放API**：支持批量创建临时邮箱、按邮箱地址拉取收件邮件
 
 - **📈 数据可视化**：使用ECharts对系统数据详情，用户邮件增长可视化显示
 
@@ -91,6 +91,107 @@
 - **数据库**：[Cloudflare D1](https://developers.cloudflare.com/d1/)
 
 - **文件存储**：[Cloudflare R2](https://developers.cloudflare.com/r2/)
+
+## 开放 API
+
+以下接口统一通过 `/api` 前缀对外暴露，Worker 内部实际路由为 `/public/...`。
+
+### 1. 生成公开 API Key
+
+先使用管理员账号生成公开 API Key，后续调用新接口时推荐放在 `X-API-Key` 请求头中。
+
+```bash
+curl -X POST \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@example.com","password":"your_admin_password"}' \
+  https://your-domain.com/api/public/genToken
+```
+
+响应示例：
+
+```json
+{
+  "code": 200,
+  "message": "success",
+  "data": {
+    "token": "your_api_key_here"
+  }
+}
+```
+
+### 2. 批量创建临时邮箱
+
+`POST /api/public/batch-create-emails`
+
+单次最多创建 50 个临时邮箱，`expiryDays` 仅支持 `1`、`5`、`7`、`14`、`30`，默认值为 `7`。返回的 `pin_code` 会同时写入该邮箱账号密码，可用于后续登录系统。
+
+请求参数：
+
+- `count`：必填，创建数量，范围 `1-50`
+- `domain`：可选，指定邮箱域名；未传时默认取 `domain` 环境变量中的第一个域名
+- `expiryDays`：可选，过期天数，支持 `1 | 5 | 7 | 14 | 30`
+
+请求示例：
+
+```bash
+curl -X POST \
+  -H "X-API-Key: your_api_key_here" \
+  -H "Content-Type: application/json" \
+  -d '{"count":5,"expiryDays":7}' \
+  https://your-domain.com/api/public/batch-create-emails
+```
+
+响应示例：
+
+```json
+{
+  "success": true,
+  "created_count": 5,
+  "emails": [
+    {
+      "id": 1,
+      "address": "abc123@example.com",
+      "pin_code": "482901",
+      "expires_at": "2026-03-20T12:00:00.000Z"
+    }
+  ],
+  "remaining_calls": 945
+}
+```
+
+说明：
+
+- 公开 API 默认共享 `1000` 次/日调用额度，`remaining_calls` 为本次调用后的剩余额度
+- 临时邮箱过期后会自动失效，并停止继续接收新邮件
+
+### 3. 获取指定邮箱收到的邮件
+
+`GET /api/public/emails/:address/messages`
+
+用于拉取指定临时邮箱收到的所有邮件。实际调用时建议将邮箱地址进行 URL 编码，例如把 `@` 编码成 `%40`。
+
+请求示例：
+
+```bash
+curl -H "X-API-Key: your_api_key_here" \
+  "https://your-domain.com/api/public/emails/abc123%40example.com/messages"
+```
+
+响应示例：
+
+```json
+[
+  {
+    "id": 1,
+    "sender": "noreply@service.com",
+    "subject": "您的验证码",
+    "body": "您的验证码是：123456",
+    "html": "<p>您的验证码是：<b>123456</b></p>",
+    "received_at": "2026-03-13T12:30:00.000Z",
+    "is_read": false
+  }
+]
+```
 
 ## 目录结构
 
@@ -151,6 +252,4 @@ cloud-mail
 ## 交流
 
 [Telegram](https://t.me/cloud_mail_tg)
-
-
 

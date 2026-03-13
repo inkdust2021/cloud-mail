@@ -10,6 +10,7 @@ import emailUtils from '../utils/email-utils';
 import roleService from '../service/role-service';
 import userService from '../service/user-service';
 import telegramService from '../service/telegram-service';
+import tempMailboxService from '../service/temp-mailbox-service';
 
 export async function email(message, env, ctx) {
 
@@ -44,7 +45,19 @@ export async function email(message, env, ctx) {
 
 		const email = await PostalMime.parse(content);
 
-		const account = await accountService.selectByEmailIncludeDel({ env: env }, message.to);
+		let account = await accountService.selectByEmailIncludeDel({ env: env }, message.to);
+
+		if (account?.isDel === isDel.DELETE) {
+			account = null;
+		}
+
+		const tempMailboxRow = await tempMailboxService.selectByAddress({ env: env }, message.to);
+		if (account && tempMailboxRow) {
+			if (tempMailboxRow.isDel === isDel.DELETE || tempMailboxService.isExpired(tempMailboxRow)) {
+				await tempMailboxService.expireMailbox({ env: env }, tempMailboxRow);
+				account = null;
+			}
+		}
 
 		if (!account && noRecipient === settingConst.noRecipient.CLOSE) {
 			message.setReject('Recipient not found');

@@ -1,8 +1,10 @@
 const constant = {
 	TOKEN_HEADER: 'Authorization',
+	API_KEY_HEADER: 'X-API-Key',
 	JWT_UID: 'user_id:',
 	JWT_TOKEN: 'token:',
 	TOKEN_EXPIRE: 60 * 60 * 24 * 30,
+	PUBLIC_API_DAILY_LIMIT: 1000,
 	ATTACHMENT_PREFIX: 'attachments/',
 	BACKGROUND_PREFIX: 'static/background/',
 	ADMIN_ROLE: {

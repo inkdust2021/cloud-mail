@@ -102,7 +102,7 @@ app.use('*', async (c, next) => {
 	if (path.startsWith('/public')) {
 
 		const userPublicToken = await c.env.kv.get(KvConst.PUBLIC_KEY);
-		const publicToken = c.req.header(constant.TOKEN_HEADER);
+		const publicToken = getPublicToken(c);
 		if (publicToken !== userPublicToken) {
 			throw new BizError(t('publicTokenFail'), 401);
 		}
@@ -110,7 +110,7 @@ app.use('*', async (c, next) => {
 	}
 
 
-	const jwt = c.req.header(constant.TOKEN_HEADER);
+	const jwt = normalizeToken(c.req.header(constant.TOKEN_HEADER));
 
 	const result = await jwtUtils.verifyToken(c, jwt);
 
@@ -174,4 +174,26 @@ function permKeyToPaths(permKeys) {
 		}
 	}
 	return paths;
+}
+
+function getPublicToken(c) {
+	const apiKey = normalizeToken(c.req.header(constant.API_KEY_HEADER));
+	if (apiKey) {
+		return apiKey;
+	}
+
+	return normalizeToken(c.req.header(constant.TOKEN_HEADER));
+}
+
+function normalizeToken(token) {
+	if (!token) {
+		return '';
+	}
+
+	const tokenValue = token.trim();
+	if (tokenValue.toLowerCase().startsWith('bearer ')) {
+		return tokenValue.slice(7).trim();
+	}
+
+	return tokenValue;
 }
