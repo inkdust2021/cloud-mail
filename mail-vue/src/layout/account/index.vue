@@ -1,7 +1,12 @@
 <template>
   <div class="account-box">
     <div class="head-opt">
-      <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
+      <el-tooltip :content="$t('addAccount')" placement="bottom">
+        <Icon v-perm="'account:add'" class="icon add" icon="ion:add-outline" width="23" height="23" @click="add"/>
+      </el-tooltip>
+      <el-tooltip :content="$t('addTempAccount')" placement="bottom">
+        <Icon v-perm="'account:add'" class="icon temp" icon="mdi:clock-plus-outline" width="21" height="21" @click="openAddTemp"/>
+      </el-tooltip>
       <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
     </div>
     <el-scrollbar class="scrollbar" ref="scrollbarRef">
@@ -9,7 +14,11 @@
         <el-card class="item" :class="itemBg(item.accountId)" v-for="(item, index) in accounts" :key="item.accountId"
                  @click="changeAccount(item)">
           <div class="account">
-            {{ item.email }}
+            <div class="account-email">{{ item.email }}</div>
+            <el-tag v-if="item.tempMailboxId" size="small" type="warning" effect="plain">{{ $t('tempMailbox') }}</el-tag>
+          </div>
+          <div class="account-expire" v-if="item.expiresAt">
+            {{ $t('expiresAt') }}：{{ formatDetailDate(item.expiresAt) }}
           </div>
           <div class="opt">
             <div class="send-email" @click.stop>
@@ -114,6 +123,29 @@
         <span style="font-size: 12px;color: #F56C6C" v-if="botJsError">{{ $t('verifyModuleFailed') }}</span>
       </div>
     </el-dialog>
+    <el-dialog v-model="showAddTemp" :title="$t('addTempAccount')">
+      <div class="container temp-container">
+        <el-select v-model="tempForm.domain" class="temp-select">
+          <el-option
+              v-for="item in domainList"
+              :key="item"
+              :label="item"
+              :value="item"
+          />
+        </el-select>
+        <el-select v-model="tempForm.expiryDays" class="temp-select">
+          <el-option
+              v-for="item in expiryDayOptions"
+              :key="item"
+              :label="`${item} ${$t('daily')}`"
+              :value="item"
+          />
+        </el-select>
+        <el-button class="btn" type="primary" @click="submitTemp" :loading="tempLoading">
+          {{ $t('addTempAccount') }}
+        </el-button>
+      </div>
+    </el-dialog>
     <el-dialog v-model="setNameShow" :title="$t('changeUserName')">
       <div class="container">
         <el-input v-model="accountName" type="text" :placeholder="$t('username')" autocomplete="off">
@@ -131,6 +163,7 @@ import {nextTick, reactive, ref, watch} from "vue";
 import {
   accountList,
   accountAdd,
+  accountAddTemp,
   accountDelete,
   accountSetName,
   accountSetAllReceive,
@@ -138,6 +171,7 @@ import {
 } from "@/request/account.js";
 import {sleep} from "@/utils/time-utils.js"
 import {isEmail} from "@/utils/verify-utils.js";
+import {formatDetailDate} from "@/utils/day.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useAccountStore} from "@/store/account.js";
 import {useEmailStore} from "@/store/email.js";
@@ -152,7 +186,9 @@ const accountStore = useAccountStore();
 const settingStore = useSettingStore();
 const emailStore = useEmailStore();
 const showAdd = ref(false)
+const showAddTemp = ref(false)
 const addLoading = ref(false);
+const tempLoading = ref(false);
 const domainList = settingStore.domainList
 const accounts = reactive([])
 const noLoading = ref(false)
@@ -170,9 +206,14 @@ const botJsError = ref(false)
 let verifyToken = ''
 let verifyErrorCount = 0
 let first = true
+const expiryDayOptions = [1, 5, 7, 14, 30]
 const addForm = reactive({
   email: '',
   suffix: settingStore.domainList[0]
+})
+const tempForm = reactive({
+  domain: settingStore.domainList[0],
+  expiryDays: 7
 })
 let skeletonRows = 10
 const queryParams = {
@@ -344,6 +385,12 @@ function add() {
   }, 100)
 }
 
+function openAddTemp() {
+  tempForm.domain = settingStore.domainList[0]
+  tempForm.expiryDays = 7
+  showAddTemp.value = true
+}
+
 function setAsTop(account, index) {
   accountSetAsTop(account.accountId).then(() => {
     ElMessage({
@@ -502,6 +549,33 @@ function submit() {
     addLoading.value = false
   })
 }
+
+function submitTemp() {
+  tempLoading.value = true
+
+  accountAddTemp(tempForm.domain, tempForm.expiryDays).then(account => {
+    tempLoading.value = false
+    showAddTemp.value = false
+
+    if (accounts.length === 0) {
+      accounts.push(account)
+    } else {
+      accounts.splice(1, 0, account)
+    }
+
+    changeAccount(account)
+    emailStore.emailScroll?.refreshList()
+    emailStore.sendScroll?.refreshList()
+
+    ElMessage({
+      message: `${t('addTempSuccessMsg')}：${account.email}`,
+      type: 'success',
+      plain: true,
+    })
+  }).catch(() => {
+    tempLoading.value = false
+  })
+}
 </script>
 <style>
 path[fill="#ffdda1"] {
@@ -534,6 +608,10 @@ path[fill="#ffdda1"] {
 
     .add {
       margin-left: 2px;
+    }
+
+    .temp {
+      margin-left: 10px;
     }
 
     .head-opt:not(.add) .refresh {
@@ -580,11 +658,23 @@ path[fill="#ffdda1"] {
     cursor: pointer;
 
     .account {
+      display: flex;
+      align-items: center;
+      gap: 8px;
       font-weight: 600;
-      margin-bottom: 20px;
-      overflow: hidden;
-      white-space: nowrap;
-      text-overflow: ellipsis;
+      margin-bottom: 8px;
+
+      .account-email {
+        overflow: hidden;
+        white-space: nowrap;
+        text-overflow: ellipsis;
+      }
+    }
+
+    .account-expire {
+      margin-bottom: 14px;
+      font-size: 12px;
+      color: var(--secondary-text-color);
     }
 
     .opt {
@@ -655,6 +745,16 @@ path[fill="#ffdda1"] {
 
 .add-email-turnstile {
   margin-top: 15px;
+}
+
+.temp-container {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.temp-select {
+  width: 100%;
 }
 
 .turnstile-show {

@@ -7,6 +7,7 @@ export const tempMailbox = sqliteTable('temp_mailbox', {
 	accountId: integer('account_id').notNull(),
 	address: text('address').notNull(),
 	pinCode: text('pin_code').notNull(),
+	deleteUser: integer('delete_user').default(1).notNull(),
 	expiresAt: text('expires_at').notNull(),
 	createTime: text('create_time').default(sql`CURRENT_TIMESTAMP`).notNull(),
 	isDel: integer('is_del').default(0).notNull()

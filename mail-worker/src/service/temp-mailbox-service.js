@@ -12,13 +12,24 @@ import cryptoUtils from '../utils/crypto-utils';
 import emailUtils from '../utils/email-utils';
 import verifyUtils from '../utils/verify-utils';
 import BizError from '../error/biz-error';
-import { emailConst, isDel } from '../const/entity-const';
+import { emailConst, isDel, settingConst } from '../const/entity-const';
 import { t } from '../i18n/i18n';
 import KvConst from '../const/kv-const';
+import settingService from './setting-service';
 
 const MAX_BATCH_COUNT = 50;
 const DEFAULT_EXPIRY_DAYS = 7;
 const ALLOWED_EXPIRY_DAYS = [1, 5, 7, 14, 30];
+const ENGLISH_NAME_LIST = [
+	'amelia', 'anna', 'aria', 'aubrey', 'ava', 'bella', 'brook', 'chloe', 'claire', 'daisy',
+	'ella', 'elsa', 'emily', 'emma', 'eva', 'flora', 'grace', 'hannah', 'hazel', 'iris',
+	'isla', 'ivy', 'julia', 'lily', 'luna', 'maya', 'mia', 'nina', 'olivia', 'ruby',
+	'sarah', 'sofia', 'stella', 'sylvia', 'violet', 'zoe', 'adam', 'adrian', 'alex', 'arthur',
+	'blake', 'bruce', 'caleb', 'carter', 'daniel', 'dylan', 'edgar', 'edwin', 'ethan', 'evan',
+	'felix', 'finn', 'harry', 'henry', 'hudson', 'isaac', 'jack', 'jacob', 'james', 'jonah',
+	'julian', 'kevin', 'leo', 'levi', 'liam', 'logan', 'lucas', 'mason', 'nathan', 'noah',
+	'oliver', 'oscar', 'owen', 'ryan', 'samuel', 'theo', 'thomas', 'wyatt'
+];
 
 const tempMailboxService = {
 
@@ -65,6 +76,7 @@ const tempMailboxService = {
 					accountId: accountRow.accountId,
 					address,
 					pinCode,
+					deleteUser: 1,
 					expiresAt
 				})
 				.returning()
@@ -79,6 +91,63 @@ const tempMailboxService = {
 		}
 
 		return createdList;
+	},
+
+	async createForUser(c, params = {}, userId) {
+		const { addEmail, manyEmail } = await settingService.query(c);
+
+		if (!(addEmail === settingConst.addEmail.OPEN && manyEmail === settingConst.manyEmail.OPEN)) {
+			throw new BizError(t('addAccountDisabled'));
+		}
+
+		const { domain, expiryDays } = this.parseMailboxOptions(c, params);
+		const userRow = await userService.selectById(c, userId);
+		const roleRow = await roleService.selectById(c, userRow.type);
+
+		if (userRow.email !== c.env.admin) {
+			if (roleRow.accountCount > 0) {
+				const userAccountCount = await accountService.countUserAccount(c, userId);
+				if (userAccountCount >= roleRow.accountCount) {
+					throw new BizError(t('accountLimit'), 403);
+				}
+			}
+		}
+
+		const address = await this.generateUniqueAddress(c, domain, new Set());
+
+		if (userRow.email !== c.env.admin && !roleService.hasAvailDomainPerm(roleRow.availDomain, address)) {
+			throw new BizError(t('noDomainPermAdd'), 403);
+		}
+
+		const expiresAt = dayjs().add(expiryDays, 'day').millisecond(0).toISOString();
+		const accountRow = await orm(c)
+			.insert(account)
+			.values({
+				email: address,
+				userId,
+				name: emailUtils.getName(address)
+			})
+			.returning()
+			.get();
+
+		const mailboxRow = await orm(c)
+			.insert(tempMailbox)
+			.values({
+				userId,
+				accountId: accountRow.accountId,
+				address,
+				pinCode: '',
+				deleteUser: 0,
+				expiresAt
+			})
+			.returning()
+			.get();
+
+		return {
+			...accountRow,
+			tempMailboxId: mailboxRow.mailboxId,
+			expiresAt: mailboxRow.expiresAt
+		};
 	},
 
 	async listMessagesByAddress(c, address) {
@@ -109,18 +178,24 @@ const tempMailboxService = {
 
 	parseCreateParams(c, params) {
 		const count = Number(params.count);
-		const expiryDays = params.expiryDays == null ? DEFAULT_EXPIRY_DAYS : Number(params.expiryDays);
-		const domain = this.normalizeDomain(c, params.domain);
+		const { domain, expiryDays } = this.parseMailboxOptions(c, params);
 
 		if (!Number.isInteger(count) || count < 1 || count > MAX_BATCH_COUNT) {
 			throw new BizError(t('publicCreateCountInvalid'));
 		}
 
+		return { count, domain, expiryDays };
+	},
+
+	parseMailboxOptions(c, params = {}) {
+		const expiryDays = params.expiryDays == null ? DEFAULT_EXPIRY_DAYS : Number(params.expiryDays);
+		const domain = this.normalizeDomain(c, params.domain);
+
 		if (!ALLOWED_EXPIRY_DAYS.includes(expiryDays)) {
 			throw new BizError(t('publicExpiryDaysInvalid'));
 		}
 
-		return { count, domain, expiryDays };
+		return { domain, expiryDays };
 	},
 
 	normalizeDomain(c, domain) {
@@ -168,11 +243,13 @@ const tempMailboxService = {
 	},
 
 	generatePrefix() {
-		if (globalThis.crypto?.randomUUID) {
-			return globalThis.crypto.randomUUID().replace(/-/g, '').slice(0, 12);
-		}
-
-		return `${Date.now().toString(36)}${Math.random().toString(36).slice(2, 10)}`.slice(0, 12);
+		const nameIndex = this.getRandomNumber() % ENGLISH_NAME_LIST.length;
+		const name = ENGLISH_NAME_LIST[nameIndex];
+		const digitLength = (this.getRandomNumber() % 4) + 1;
+		const min = digitLength === 1 ? 0 : 10 ** (digitLength - 1);
+		const max = (10 ** digitLength) - 1;
+		const number = min + (this.getRandomNumber() % (max - min + 1));
+		return `${name}${number}`;
 	},
 
 	getRandomNumber() {
@@ -256,12 +333,20 @@ const tempMailboxService = {
 			return;
 		}
 
-		await Promise.all([
+		const deleteUser = Number(mailboxRow.deleteUser ?? 1) === 1;
+		const tasks = [
 			orm(c).update(tempMailbox).set({ isDel: isDel.DELETE }).where(eq(tempMailbox.mailboxId, mailboxRow.mailboxId)).run(),
-			orm(c).update(account).set({ isDel: isDel.DELETE }).where(eq(account.accountId, mailboxRow.accountId)).run(),
-			orm(c).update(user).set({ isDel: isDel.DELETE }).where(eq(user.userId, mailboxRow.userId)).run(),
-			c.env.kv?.delete ? c.env.kv.delete(KvConst.AUTH_INFO + mailboxRow.userId) : Promise.resolve()
-		]);
+			orm(c).update(account).set({ isDel: isDel.DELETE }).where(eq(account.accountId, mailboxRow.accountId)).run()
+		];
+
+		if (deleteUser) {
+			tasks.push(
+				orm(c).update(user).set({ isDel: isDel.DELETE }).where(eq(user.userId, mailboxRow.userId)).run(),
+				c.env.kv?.delete ? c.env.kv.delete(KvConst.AUTH_INFO + mailboxRow.userId) : Promise.resolve()
+			);
+		}
+
+		await Promise.all(tasks);
 	},
 
 	async clearExpired(c) {
@@ -281,14 +366,21 @@ const tempMailboxService = {
 
 		const mailboxIds = expiredList.map((item) => item.mailboxId);
 		const accountIds = [...new Set(expiredList.map((item) => item.accountId))];
-		const userIds = [...new Set(expiredList.map((item) => item.userId))];
+		const userIds = [...new Set(expiredList.filter((item) => Number(item.deleteUser ?? 1) === 1).map((item) => item.userId))];
 
-		await Promise.all([
+		const tasks = [
 			orm(c).update(tempMailbox).set({ isDel: isDel.DELETE }).where(inArray(tempMailbox.mailboxId, mailboxIds)).run(),
-			orm(c).update(account).set({ isDel: isDel.DELETE }).where(inArray(account.accountId, accountIds)).run(),
-			orm(c).update(user).set({ isDel: isDel.DELETE }).where(inArray(user.userId, userIds)).run(),
-			...(c.env.kv?.delete ? userIds.map((userId) => c.env.kv.delete(KvConst.AUTH_INFO + userId)) : [])
-		]);
+			orm(c).update(account).set({ isDel: isDel.DELETE }).where(inArray(account.accountId, accountIds)).run()
+		];
+
+		if (userIds.length > 0) {
+			tasks.push(
+				orm(c).update(user).set({ isDel: isDel.DELETE }).where(inArray(user.userId, userIds)).run(),
+				...(c.env.kv?.delete ? userIds.map((userId) => c.env.kv.delete(KvConst.AUTH_INFO + userId)) : [])
+			);
+		}
+
+		await Promise.all(tasks);
 
 		return expiredList.length;
 	},

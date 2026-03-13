@@ -12,6 +12,7 @@ import turnstileService from './turnstile-service';
 import roleService from './role-service';
 import { t } from '../i18n/i18n';
 import verifyRecordService from './verify-record-service';
+import tempMailbox from '../entity/temp-mailbox';
 
 const accountService = {
 
@@ -123,7 +124,19 @@ const accountService = {
 			lastSort = 9999999999;
 		}
 
-		return orm(c).select().from(account).where(
+		return orm(c).select({
+			...account,
+			tempMailboxId: tempMailbox.mailboxId,
+			expiresAt: tempMailbox.expiresAt
+		}).from(account)
+			.leftJoin(
+				tempMailbox,
+				and(
+					eq(tempMailbox.accountId, account.accountId),
+					eq(tempMailbox.isDel, isDel.NORMAL)
+				)
+			)
+			.where(
 			and(
 				eq(account.userId, userId),
 				eq(account.isDel, isDel.NORMAL),
@@ -159,6 +172,8 @@ const accountService = {
 			and(eq(account.userId, userId),
 				eq(account.accountId, accountId)))
 			.run();
+
+		await orm(c).update(tempMailbox).set({ isDel: isDel.DELETE }).where(eq(tempMailbox.accountId, accountId)).run();
 	},
 
 	selectById(c, accountId) {
@@ -243,6 +258,7 @@ const accountService = {
 	async physicsDelete(c, params) {
 		const { accountId } = params
 		await emailService.physicsDeleteByAccountId(c, accountId)
+		await orm(c).delete(tempMailbox).where(eq(tempMailbox.accountId, accountId)).run();
 		await orm(c).delete(account).where(eq(account.accountId, accountId)).run();
 	},
 

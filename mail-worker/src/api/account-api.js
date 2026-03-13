@@ -2,6 +2,7 @@ import app from '../hono/hono';
 import accountService from '../service/account-service';
 import result from '../model/result';
 import userContext from '../security/user-context';
+import tempMailboxService from '../service/temp-mailbox-service';
 
 app.get('/account/list', async (c) => {
 	const list = await accountService.list(c, c.req.query(), userContext.getUserId(c));
@@ -15,6 +16,11 @@ app.delete('/account/delete', async (c) => {
 
 app.post('/account/add', async (c) => {
 	const account = await accountService.add(c, await c.req.json(), userContext.getUserId(c));
+	return c.json(result.ok(account));
+});
+
+app.post('/account/addTemp', async (c) => {
+	const account = await tempMailboxService.createForUser(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok(account));
 });
 

@@ -8,6 +8,10 @@ export function accountAdd(email,token) {
     return http.post('/account/add', {email,token})
 }
 
+export function accountAddTemp(domain, expiryDays) {
+    return http.post('/account/addTemp', {domain, expiryDays})
+}
+
 export function accountSetName(accountId,name) {
     return http.put('/account/setName', {name,accountId})
 }

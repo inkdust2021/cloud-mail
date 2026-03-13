@@ -125,6 +125,8 @@ curl -X POST \
 
 单次最多创建 50 个临时邮箱，`expiryDays` 仅支持 `1`、`5`、`7`、`14`、`30`，默认值为 `7`。返回的 `pin_code` 会同时写入该邮箱账号密码，可用于后续登录系统。
 
+创建出的邮箱前缀格式为：**随机英文名 + 1-4 位随机数字**，例如 `olivia23@example.com`、`leo7@example.com`。
+
 请求参数：
 
 - `count`：必填，创建数量，范围 `1-50`
@@ -150,7 +152,7 @@ curl -X POST \
   "emails": [
     {
       "id": 1,
-      "address": "abc123@example.com",
+      "address": "olivia23@example.com",
       "pin_code": "482901",
       "expires_at": "2026-03-20T12:00:00.000Z"
     }
@@ -170,11 +172,13 @@ curl -X POST \
 
 用于拉取指定临时邮箱收到的所有邮件。实际调用时建议将邮箱地址进行 URL 编码，例如把 `@` 编码成 `%40`。
 
+系统前端邮箱侧栏也已提供“创建临时邮箱”按钮，可直接在页面中生成并使用临时邮箱。
+
 请求示例：
 
 ```bash
 curl -H "X-API-Key: your_api_key_here" \
-  "https://your-domain.com/api/public/emails/abc123%40example.com/messages"
+  "https://your-domain.com/api/public/emails/olivia23%40example.com/messages"
 ```
 
 响应示例：
@@ -252,4 +256,3 @@ cloud-mail
 ## 交流
 
 [Telegram](https://t.me/cloud_mail_tg)
-

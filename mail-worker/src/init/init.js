@@ -29,8 +29,17 @@ const dbInit = {
 		await this.v2_8DB(c);
 		await this.v2_9DB(c);
 		await this.v3DB(c);
+		await this.v3_1DB(c);
 		await settingService.refresh(c);
 		return c.text('success');
+	},
+
+	async v3_1DB(c) {
+		try {
+			await c.env.db.prepare(`ALTER TABLE temp_mailbox ADD COLUMN delete_user INTEGER NOT NULL DEFAULT 1;`).run();
+		} catch (e) {
+			console.warn(`跳过字段：${e.message}`);
+		}
 	},
 
 	async v3DB(c) {
@@ -42,6 +51,7 @@ const dbInit = {
 					account_id INTEGER NOT NULL,
 					address TEXT NOT NULL,
 					pin_code TEXT NOT NULL,
+					delete_user INTEGER NOT NULL DEFAULT 1,
 					expires_at TEXT NOT NULL,
 					create_time DATETIME DEFAULT CURRENT_TIMESTAMP NOT NULL,
 					is_del INTEGER NOT NULL DEFAULT 0
