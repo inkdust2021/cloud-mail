@@ -112,6 +112,10 @@
         <el-button class="btn" type="primary" @click="submit" :loading="addLoading"
         >{{ $t('add') }}
         </el-button>
+        <div class="force-add" v-if="userStore.user.type === 0">
+          <el-checkbox v-model="addForm.force">{{ $t('forceAddAccount') }}</el-checkbox>
+          <div class="force-add-desc">{{ $t('forceAddAccountDesc') }}</div>
+        </div>
       </div>
       <div
           class="add-email-turnstile"
@@ -209,7 +213,8 @@ let first = true
 const expiryDayOptions = [1, 5, 7, 14, 30]
 const addForm = reactive({
   email: '',
-  suffix: settingStore.domainList[0]
+  suffix: settingStore.domainList[0],
+  force: false
 })
 const tempForm = reactive({
   domain: settingStore.domainList[0],
@@ -379,6 +384,7 @@ function changeAccount(account) {
 }
 
 function add() {
+  addForm.force = false
   showAdd.value = true
   setTimeout(() => {
     addRef.value.focus()
@@ -467,6 +473,8 @@ function getAccountList() {
 
 function submit() {
 
+  const forceAddByAdmin = userStore.user.type === 0 && addForm.force
+
   if (!addForm.email) {
     ElMessage({
       message: t('emptyEmailMsg'),
@@ -494,7 +502,7 @@ function submit() {
     return
   }
 
-  if (!verifyToken && (settingStore.settings.addEmailVerify === 0 || (settingStore.settings.addEmailVerify === 2 && settingStore.settings.addVerifyOpen))) {
+  if (!forceAddByAdmin && !verifyToken && (settingStore.settings.addEmailVerify === 0 || (settingStore.settings.addEmailVerify === 2 && settingStore.settings.addVerifyOpen))) {
     if (!verifyShow.value) {
       verifyShow.value = true
       nextTick(() => {
@@ -520,13 +528,21 @@ function submit() {
   }
 
   addLoading.value = true
-  accountAdd(addForm.email + addForm.suffix, verifyToken).then(account => {
+  accountAdd(addForm.email + addForm.suffix, verifyToken, addForm.force).then(account => {
     addLoading.value = false
     showAdd.value = false
     addForm.email = ''
-    accounts.push(account)
+    addForm.force = false
+    const index = accounts.findIndex(item => item.accountId === account.accountId)
+    if (index > -1) {
+      accounts.splice(index, 1, account)
+    } else {
+      accounts.push(account)
+    }
     verifyToken = ''
-    settingStore.settings.addVerifyOpen = account.addVerifyOpen
+    if (typeof account.addVerifyOpen !== 'undefined') {
+      settingStore.settings.addVerifyOpen = account.addVerifyOpen
+    }
     ElMessage({
       message: t('addSuccessMsg'),
       type: "success",
@@ -759,6 +775,17 @@ path[fill="#ffdda1"] {
 
 .turnstile-show {
   opacity: 1;
+}
+
+.force-add {
+  margin-top: 12px;
+}
+
+.force-add-desc {
+  margin-top: 6px;
+  font-size: 12px;
+  color: var(--secondary-text-color);
+  line-height: 1.5;
 }
 
 .turnstile-hide {

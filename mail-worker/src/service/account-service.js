@@ -13,6 +13,10 @@ import roleService from './role-service';
 import { t } from '../i18n/i18n';
 import verifyRecordService from './verify-record-service';
 import tempMailbox from '../entity/temp-mailbox';
+import user from '../entity/user';
+import email from '../entity/email';
+import { att } from '../entity/att';
+import { star } from '../entity/star';
 
 const accountService = {
 
@@ -20,7 +24,8 @@ const accountService = {
 
 		const { addEmailVerify , addEmail, manyEmail, addVerifyCount, minEmailPrefix, emailPrefixFilter } = await settingService.query(c);
 
-		let { email, token } = params;
+		let { email, token, force } = params;
+		force = !!force;
 
 
 		if (!(addEmail === settingConst.addEmail.OPEN && manyEmail === settingConst.manyEmail.OPEN)) {
@@ -49,16 +54,24 @@ const accountService = {
 		}
 
 		let accountRow = await this.selectByEmailIncludeDel(c, email);
+		const userRow = await userService.selectById(c, userId);
+		const isAdmin = userRow.email === c.env.admin;
 
-		if (accountRow && accountRow.isDel === isDel.DELETE) {
-			throw new BizError(t('isDelAccount'));
+		if (force && !isAdmin) {
+			throw new BizError(t('unauthorized'), 403);
 		}
 
 		if (accountRow) {
+			if (force && isAdmin) {
+				return await this.forceAdd(c, accountRow, userId);
+			}
+
+			if (accountRow.isDel === isDel.DELETE) {
+				throw new BizError(t('isDelAccount'));
+			}
+
 			throw new BizError(t('isRegAccount'));
 		}
-
-		const userRow = await userService.selectById(c, userId);
 		const roleRow = await roleService.selectById(c, userRow.type);
 
 		if (userRow.email !== c.env.admin) {
@@ -75,6 +88,12 @@ const accountService = {
 		}
 
 		let addVerifyOpen = false
+
+		if (isAdmin && force) {
+			accountRow = await orm(c).insert(account).values({ email: email, userId: userId, name: emailUtils.getName(email) }).returning().get();
+			accountRow.addVerifyOpen = false
+			return accountRow;
+		}
 
 		if (addEmailVerify === settingConst.addEmailVerify.OPEN) {
 			addVerifyOpen = true
@@ -98,6 +117,46 @@ const accountService = {
 
 		accountRow.addVerifyOpen = addVerifyOpen
 		return accountRow;
+	},
+
+	async forceAdd(c, accountRow, userId) {
+		const targetUser = await userService.selectById(c, userId);
+		if (targetUser.email !== c.env.admin) {
+			throw new BizError(t('unauthorized'), 403);
+		}
+
+		const primaryUser = await userService.selectByEmailIncludeDel(c, accountRow.email);
+		if (primaryUser && primaryUser.userId !== userId) {
+			throw new BizError(t('forceAddPrimaryDenied'), 403);
+		}
+
+		if (accountRow.userId === userId && accountRow.isDel === isDel.NORMAL) {
+			return accountRow;
+		}
+
+		const emailIds = await orm(c)
+			.select({ emailId: email.emailId })
+			.from(email)
+			.where(eq(email.accountId, accountRow.accountId))
+			.all();
+
+		const emailIdList = emailIds.map(item => item.emailId);
+
+		await orm(c).update(account).set({
+			userId,
+			isDel: isDel.NORMAL,
+			name: emailUtils.getName(accountRow.email)
+		}).where(eq(account.accountId, accountRow.accountId)).run();
+
+		await orm(c).update(email).set({ userId }).where(eq(email.accountId, accountRow.accountId)).run();
+		await orm(c).update(att).set({ userId }).where(eq(att.accountId, accountRow.accountId)).run();
+		await orm(c).update(tempMailbox).set({ userId, deleteUser: 0, isDel: isDel.NORMAL }).where(eq(tempMailbox.accountId, accountRow.accountId)).run();
+
+		if (emailIdList.length > 0) {
+			await orm(c).delete(star).where(inArray(star.emailId, emailIdList)).run();
+		}
+
+		return await orm(c).select().from(account).where(eq(account.accountId, accountRow.accountId)).get();
 	},
 
 	selectByEmailIncludeDel(c, email) {

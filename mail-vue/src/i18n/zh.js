@@ -13,6 +13,8 @@ const zh = {
     noMoreData: '没有更多数据了',
     noMessagesFound: '没有任何邮件',
     addAccount: '添加邮箱',
+    forceAddAccount: '管理员强制添加',
+    forceAddAccountDesc: '已被普通用户占用的主登录邮箱不能强制接管',
     addTempAccount: '创建临时邮箱',
     emailAccount: '邮箱',
     account: '邮箱',

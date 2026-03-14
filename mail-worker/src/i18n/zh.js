@@ -68,6 +68,7 @@ const zh = {
 	publicTempEmailGenerateFailed: '临时邮箱生成失败，请稍后重试',
 	publicTempEmailNotFound: '临时邮箱不存在',
 	publicTempEmailExpired: '临时邮箱已过期',
+	forceAddPrimaryDenied: '该邮箱是某个用户的主登录邮箱，不能被强制接管',
 	notAdmin: '输入的邮箱不是管理员邮箱',
 	emailExistDatabase: '有邮箱已存在数据库中',
 	notConfigOss: '对象存储未配置',

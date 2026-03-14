@@ -68,6 +68,7 @@ const en = {
 	publicTempEmailGenerateFailed: 'Failed to generate temporary email, please try again later',
 	publicTempEmailNotFound: 'Temporary mailbox not found',
 	publicTempEmailExpired: 'Temporary mailbox has expired',
+	forceAddPrimaryDenied: 'This email is a user\'s primary login address and cannot be force claimed',
 	notAdmin: 'The entered email is not an administrator email',
 	emailExistDatabase: 'Email already exists in the database',
 	notConfigOss: 'Object storage not configured',
