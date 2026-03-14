@@ -126,9 +126,7 @@ const accountService = {
 		}
 
 		const primaryUser = await userService.selectByEmailIncludeDel(c, accountRow.email);
-		if (primaryUser && primaryUser.userId !== userId) {
-			throw new BizError(t('forceAddPrimaryDenied'), 403);
-		}
+		const sourceUserId = accountRow.userId;
 
 		if (accountRow.userId === userId && accountRow.isDel === isDel.NORMAL) {
 			return accountRow;
@@ -142,6 +140,27 @@ const accountService = {
 
 		const emailIdList = emailIds.map(item => item.emailId);
 
+		if (primaryUser && primaryUser.userId !== userId) {
+			await userService.delete(c, primaryUser.userId);
+			await orm(c)
+				.update(account)
+				.set({ isDel: isDel.DELETE })
+				.where(and(
+					eq(account.userId, primaryUser.userId),
+					ne(account.accountId, accountRow.accountId)
+				))
+				.run();
+
+			await orm(c)
+				.update(tempMailbox)
+				.set({ isDel: isDel.DELETE })
+				.where(and(
+					eq(tempMailbox.userId, primaryUser.userId),
+					ne(tempMailbox.accountId, accountRow.accountId)
+				))
+				.run();
+		}
+
 		await orm(c).update(account).set({
 			userId,
 			isDel: isDel.NORMAL,
@@ -154,6 +173,18 @@ const accountService = {
 
 		if (emailIdList.length > 0) {
 			await orm(c).delete(star).where(inArray(star.emailId, emailIdList)).run();
+		}
+
+		if (sourceUserId !== userId && sourceUserId !== primaryUser?.userId) {
+			const remainCount = await orm(c)
+				.select({ total: count() })
+				.from(account)
+				.where(and(eq(account.userId, sourceUserId), eq(account.isDel, isDel.NORMAL)))
+				.get();
+
+			if (!remainCount?.total) {
+				await userService.delete(c, sourceUserId);
+			}
 		}
 
 		return await orm(c).select().from(account).where(eq(account.accountId, accountRow.accountId)).get();

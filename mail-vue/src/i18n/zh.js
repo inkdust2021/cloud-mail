@@ -14,7 +14,7 @@ const zh = {
     noMessagesFound: '没有任何邮件',
     addAccount: '添加邮箱',
     forceAddAccount: '管理员强制添加',
-    forceAddAccountDesc: '已被普通用户占用的主登录邮箱不能强制接管',
+    forceAddAccountDesc: '如果这是旧用户的主登录邮箱，系统会停用旧用户并接管该邮箱',
     addTempAccount: '创建临时邮箱',
     emailAccount: '邮箱',
     account: '邮箱',

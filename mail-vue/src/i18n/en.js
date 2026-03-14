@@ -14,7 +14,7 @@ const en = {
     noMessagesFound: 'No messages found',
     addAccount: 'Add Email Address',
     forceAddAccount: 'Admin Force Add',
-    forceAddAccountDesc: 'Primary login emails owned by regular users cannot be force claimed',
+    forceAddAccountDesc: 'If this is the old user\'s primary login email, the old user will be disabled and the mailbox claimed',
     addTempAccount: 'Create Temporary Mailbox',
     emailAccount: 'Email',
     account: 'Address',
