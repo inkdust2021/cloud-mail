@@ -1,6 +1,7 @@
 import app from '../hono/hono';
 import result from '../model/result';
 import settingService from '../service/setting-service';
+import publicService from '../service/public-service';
 
 app.put('/setting/set', async (c) => {
 	await settingService.set(c, await c.req.json());
@@ -27,3 +28,12 @@ app.delete('/setting/deleteBackground', async (c) => {
 	return c.json(result.ok());
 });
 
+app.get('/setting/queryPublicApiToken', async (c) => {
+	const data = await publicService.getToken(c);
+	return c.json(result.ok(data));
+});
+
+app.post('/setting/refreshPublicApiToken', async (c) => {
+	const data = await publicService.refreshToken(c);
+	return c.json(result.ok(data));
+});

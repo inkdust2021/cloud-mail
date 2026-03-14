@@ -166,6 +166,21 @@ const publicService = {
 
 		await this.verifyUser(c, params)
 
+		return this.createToken(c);
+	},
+
+	async getToken(c) {
+		this.verifyAdminAuth(c);
+		const token = await c.env.kv.get(KvConst.PUBLIC_KEY);
+		return { token: token || '' };
+	},
+
+	async refreshToken(c) {
+		this.verifyAdminAuth(c);
+		return this.createToken(c);
+	},
+
+	async createToken(c) {
 		const uuid = uuidv4();
 
 		await c.env.kv.put(KvConst.PUBLIC_KEY, uuid);
@@ -222,6 +237,13 @@ const publicService = {
 
 		if (!await cryptoUtils.verifyPassword(password, userRow.salt, userRow.password)) {
 			throw new BizError(t('IncorrectPwd'));
+		}
+	},
+
+	verifyAdminAuth(c) {
+		const loginUser = c.get?.('user');
+		if (!loginUser || loginUser.email !== c.env.admin) {
+			throw new BizError(t('notAdmin'), 403);
 		}
 	}
 

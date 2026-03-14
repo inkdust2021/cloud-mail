@@ -329,6 +329,37 @@
             </div>
           </div>
 
+          <div class="settings-card" v-if="isAdmin">
+            <div class="card-title">{{ $t('openApi') }}</div>
+            <div class="card-content">
+              <div class="setting-item api-key-row">
+                <div><span>{{ $t('publicApiKey') }}</span></div>
+                <div class="api-key-box">
+                  <el-input
+                      v-model="publicApiToken"
+                      readonly
+                      show-password
+                      :placeholder="$t('apiKeyEmpty')"
+                  />
+                </div>
+              </div>
+              <div class="setting-item">
+                <div class="api-key-desc">{{ $t('apiKeyDesc') }}</div>
+                <div class="api-key-actions">
+                  <el-button class="opt-button" size="small" type="primary" @click="loadPublicApiToken(true)" :loading="publicApiLoading">
+                    {{ $t('loadApiKey') }}
+                  </el-button>
+                  <el-button class="opt-button" size="small" type="warning" @click="regeneratePublicApiKey" :loading="publicApiLoading">
+                    {{ $t('regenerateApiKey') }}
+                  </el-button>
+                  <el-button class="opt-button" size="small" @click="copyPublicApiKey" :disabled="!publicApiToken">
+                    {{ $t('copy') }}
+                  </el-button>
+                </div>
+              </div>
+            </div>
+          </div>
+
           <div class="settings-card">
             <div class="card-title">{{ $t('noticeTitle') }}</div>
             <div class="card-content">
@@ -734,7 +765,14 @@
 
 <script setup>
 import {computed, defineOptions, reactive, ref} from "vue";
-import {deleteBackground, setBackground, settingQuery, settingSet} from "@/request/setting.js";
+import {
+  deleteBackground,
+  queryPublicApiToken,
+  refreshPublicApiToken,
+  setBackground,
+  settingQuery,
+  settingSet
+} from "@/request/setting.js";
 import {useSettingStore} from "@/store/setting.js";
 import {useUiStore} from "@/store/ui.js";
 import {useUserStore} from "@/store/user.js";
@@ -776,9 +814,12 @@ const showResendList = ref(false)
 const settingStore = useSettingStore();
 const uiStore = useUiStore();
 const {settings: setting} = storeToRefs(settingStore);
+const isAdmin = computed(() => userStore.user.type === 0)
 const editTitle = ref('')
 const settingLoading = ref(false)
+const publicApiLoading = ref(false)
 const clearS3Loading = ref(false)
+const publicApiToken = ref('')
 const r2DomainInput = ref('')
 const loginOpacity = ref(0)
 const minEmailPrefix = ref(0)
@@ -874,7 +915,68 @@ function getSettings() {
     resetNoticeForm()
     resetAddS3Form()
     resetEmailPrefix()
+    if (isAdmin.value) {
+      loadPublicApiToken()
+    }
   })
+}
+
+function loadPublicApiToken(showMessage = false) {
+  if (!isAdmin.value || publicApiLoading.value) return
+  publicApiLoading.value = true
+  queryPublicApiToken().then((data) => {
+    publicApiToken.value = data.token || ''
+    if (showMessage) {
+      ElMessage({
+        message: data.token ? t('saveSuccessMsg') : t('apiKeyEmpty'),
+        type: data.token ? 'success' : 'warning',
+        plain: true
+      })
+    }
+  }).finally(() => {
+    publicApiLoading.value = false
+  })
+}
+
+function regeneratePublicApiKey() {
+  ElMessageBox.confirm(t('regenerateApiKeyConfirm'), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
+    type: 'warning'
+  }).then(() => {
+    publicApiLoading.value = true
+    refreshPublicApiToken().then((data) => {
+      publicApiToken.value = data.token || ''
+      ElMessage({
+        message: t('regenerateApiKeySuccess'),
+        type: 'success',
+        plain: true
+      })
+    }).finally(() => {
+      publicApiLoading.value = false
+    })
+  })
+}
+
+async function copyPublicApiKey() {
+  if (!publicApiToken.value) {
+    return
+  }
+
+  try {
+    await navigator.clipboard.writeText(publicApiToken.value)
+    ElMessage({
+      message: t('copySuccessMsg'),
+      type: 'success',
+      plain: true
+    })
+  } catch (e) {
+    ElMessage({
+      message: t('copyFailMsg'),
+      type: 'error',
+      plain: true
+    })
+  }
 }
 
 
@@ -1392,6 +1494,29 @@ function editSetting(settingForm, refreshStatus = true) {
     gap: 15px;
     padding: 15px;
   }
+}
+
+.api-key-row {
+  align-items: flex-start !important;
+}
+
+.api-key-box {
+  width: 260px;
+  max-width: 100%;
+}
+
+.api-key-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.api-key-desc {
+  font-size: 13px;
+  color: var(--secondary-text-color);
+  line-height: 1.6;
+  padding-right: 12px;
 }
 
 .background {

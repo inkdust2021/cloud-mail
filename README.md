@@ -100,6 +100,8 @@
 
 先使用管理员账号生成公开 API Key，后续调用新接口时推荐放在 `X-API-Key` 请求头中。
 
+如果你已经使用管理员账号登录前端，也可以直接在“系统设置 -> 开放 API”里一键查看、复制或重新生成 API Key。
+
 ```bash
 curl -X POST \
   -H "Content-Type: application/json" \

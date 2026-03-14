@@ -19,3 +19,11 @@ export function setBackground(background) {
 export function deleteBackground() {
     return http.delete('/setting/deleteBackground')
 }
+
+export function queryPublicApiToken() {
+    return http.get('/setting/queryPublicApiToken')
+}
+
+export function refreshPublicApiToken() {
+    return http.post('/setting/refreshPublicApiToken')
+}
