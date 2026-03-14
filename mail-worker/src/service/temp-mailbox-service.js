@@ -20,15 +20,39 @@ import settingService from './setting-service';
 const MAX_BATCH_COUNT = 50;
 const DEFAULT_EXPIRY_DAYS = 7;
 const ALLOWED_EXPIRY_DAYS = [1, 5, 7, 14, 30];
-const ENGLISH_NAME_LIST = [
-	'amelia', 'anna', 'aria', 'aubrey', 'ava', 'bella', 'brook', 'chloe', 'claire', 'daisy',
-	'ella', 'elsa', 'emily', 'emma', 'eva', 'flora', 'grace', 'hannah', 'hazel', 'iris',
-	'isla', 'ivy', 'julia', 'lily', 'luna', 'maya', 'mia', 'nina', 'olivia', 'ruby',
-	'sarah', 'sofia', 'stella', 'sylvia', 'violet', 'zoe', 'adam', 'adrian', 'alex', 'arthur',
-	'blake', 'bruce', 'caleb', 'carter', 'daniel', 'dylan', 'edgar', 'edwin', 'ethan', 'evan',
-	'felix', 'finn', 'harry', 'henry', 'hudson', 'isaac', 'jack', 'jacob', 'james', 'jonah',
-	'julian', 'kevin', 'leo', 'levi', 'liam', 'logan', 'lucas', 'mason', 'nathan', 'noah',
-	'oliver', 'oscar', 'owen', 'ryan', 'samuel', 'theo', 'thomas', 'wyatt'
+const MAX_BASE_NAME_ATTEMPTS = 120;
+const MAX_ADDRESS_ATTEMPTS_PER_BASE_NAME = 12;
+const MAX_ADDRESS_FALLBACK_ATTEMPTS = 60;
+const FIRST_NAME_LIST = [
+	'abigail', 'addison', 'adrian', 'alexander', 'alice', 'allison', 'amelia', 'andrew', 'anna', 'anthony',
+	'aria', 'asher', 'audrey', 'aurora', 'ava', 'avery', 'benjamin', 'bella', 'blake', 'brooklyn',
+	'caleb', 'cameron', 'caroline', 'carter', 'charles', 'charlotte', 'chloe', 'christopher', 'claire', 'connor',
+	'daniel', 'david', 'dylan', 'eleanor', 'elena', 'elias', 'elijah', 'elizabeth', 'ella', 'ellie',
+	'emilia', 'emily', 'emma', 'ethan', 'eva', 'evelyn', 'ezra', 'felix', 'gabriel', 'genesis',
+	'gianna', 'grace', 'grayson', 'hannah', 'harper', 'hazel', 'henry', 'hudson', 'hunter', 'isaac',
+	'isabella', 'ivy', 'jack', 'jacob', 'james', 'jayden', 'joseph', 'joshua', 'julian', 'julia',
+	'layla', 'leah', 'leo', 'levi', 'liam', 'lily', 'lincoln', 'logan', 'lucas', 'luke',
+	'luna', 'madison', 'mateo', 'maya', 'mia', 'michael', 'mila', 'natalie', 'nathan', 'noah',
+	'nora', 'oliver', 'olivia', 'owen', 'paisley', 'penelope', 'quinn', 'riley', 'ruby', 'ryan',
+	'samantha', 'samuel', 'sarah', 'savannah', 'scarlett', 'sebastian', 'sofia', 'sophia', 'stella', 'theodore',
+	'thomas', 'victoria', 'violet', 'william', 'willow', 'wyatt', 'zoe', 'zoey'
+];
+const LAST_NAME_LIST = [
+	'smith', 'johnson', 'williams', 'brown', 'jones', 'garcia', 'miller', 'davis', 'rodriguez', 'martinez',
+	'hernandez', 'lopez', 'gonzalez', 'wilson', 'anderson', 'thomas', 'taylor', 'moore', 'jackson', 'martin',
+	'lee', 'perez', 'thompson', 'white', 'harris', 'sanchez', 'clark', 'ramirez', 'lewis', 'robinson',
+	'walker', 'young', 'allen', 'king', 'wright', 'scott', 'torres', 'nguyen', 'hill', 'flores',
+	'green', 'adams', 'nelson', 'baker', 'hall', 'rivera', 'campbell', 'mitchell', 'carter', 'roberts',
+	'gomez', 'phillips', 'evans', 'turner', 'diaz', 'parker', 'cruz', 'edwards', 'collins', 'reyes',
+	'stewart', 'morris', 'morales', 'murphy', 'cook', 'rogers', 'gutierrez', 'ortiz', 'morgan', 'cooper',
+	'peterson', 'bailey', 'reed', 'kelly', 'howard', 'ramos', 'kim', 'cox', 'ward', 'richardson',
+	'watson', 'brooks', 'chavez', 'wood', 'james', 'bennett', 'gray', 'mendoza', 'ruiz', 'hughes',
+	'price', 'alvarez', 'castillo', 'sanders', 'patel', 'myers', 'long', 'ross', 'foster', 'jimenez',
+	'powell', 'jenkins', 'perry', 'russell', 'sullivan', 'bell', 'cole', 'butler', 'henderson', 'barnes',
+	'gonzales', 'fisher', 'vasquez', 'simmons', 'romero', 'jordan', 'patterson', 'alexander', 'hamilton', 'graham',
+	'reynolds', 'griffin', 'wallace', 'moreno', 'west', 'coleman', 'hayes', 'bryant', 'herrera', 'gibson',
+	'ellis', 'tran', 'medina', 'aguilar', 'stevens', 'murray', 'ford', 'castro', 'marshall', 'owens',
+	'harrison', 'fernandez', 'mcdonald', 'woods', 'washington', 'kennedy', 'wells', 'vargas', 'henry', 'chen'
 ];
 
 const tempMailboxService = {
@@ -43,10 +67,11 @@ const tempMailboxService = {
 
 		const expiresAt = dayjs().add(expiryDays, 'day').millisecond(0).toISOString();
 		const usedAddressSet = new Set();
+		const usedBaseNameSet = new Set();
 		const createdList = [];
 
 		for (let index = 0; index < count; index += 1) {
-			const address = await this.generateUniqueAddress(c, domain, usedAddressSet);
+			const address = await this.generateUniqueAddress(c, domain, usedAddressSet, usedBaseNameSet);
 			const pinCode = this.generatePinCode();
 			const { salt, hash } = await cryptoUtils.hashPassword(pinCode);
 
@@ -113,7 +138,7 @@ const tempMailboxService = {
 			}
 		}
 
-		const address = await this.generateUniqueAddress(c, domain, new Set());
+		const address = await this.generateUniqueAddress(c, domain, new Set(), new Set());
 
 		if (userRow.email !== c.env.admin && !roleService.hasAvailDomainPerm(roleRow.availDomain, address)) {
 			throw new BizError(t('noDomainPermAdd'), 403);
@@ -242,14 +267,22 @@ const tempMailboxService = {
 		return String(number % 1000000).padStart(6, '0');
 	},
 
-	generatePrefix() {
-		const nameIndex = this.getRandomNumber() % ENGLISH_NAME_LIST.length;
-		const name = ENGLISH_NAME_LIST[nameIndex];
+	generateBaseName() {
+		const firstNameIndex = this.getRandomNumber() % FIRST_NAME_LIST.length;
+		const lastNameIndex = this.getRandomNumber() % LAST_NAME_LIST.length;
+		return `${FIRST_NAME_LIST[firstNameIndex]}${LAST_NAME_LIST[lastNameIndex]}`;
+	},
+
+	generateRandomDigits() {
 		const digitLength = (this.getRandomNumber() % 4) + 1;
 		const min = digitLength === 1 ? 0 : 10 ** (digitLength - 1);
 		const max = (10 ** digitLength) - 1;
 		const number = min + (this.getRandomNumber() % (max - min + 1));
-		return `${name}${number}`;
+		return String(number);
+	},
+
+	generatePrefix(baseName = this.generateBaseName()) {
+		return `${baseName}${this.generateRandomDigits()}`;
 	},
 
 	getRandomNumber() {
@@ -262,8 +295,68 @@ const tempMailboxService = {
 		return Math.floor(Math.random() * 0xFFFFFFFF);
 	},
 
-	async generateUniqueAddress(c, domain, usedAddressSet) {
-		for (let index = 0; index < 20; index += 1) {
+	buildBaseNameLikePatterns(baseName, domain) {
+		return [1, 2, 3, 4].map((length) => `${baseName}${'_'.repeat(length)}@${domain}`);
+	},
+
+	async hasExistingBaseName(c, domain, baseName) {
+		const patterns = this.buildBaseNameLikePatterns(baseName.toLowerCase(), domain.toLowerCase());
+		const conditions = patterns.map((pattern) => sql`lower(${account.email}) LIKE ${pattern}`);
+		const [firstCondition, ...restConditions] = conditions;
+		const whereCondition = restConditions.reduce((result, condition) => sql`${result} OR ${condition}`, firstCondition);
+
+		const accountRow = await orm(c)
+			.select({ accountId: account.accountId })
+			.from(account)
+			.where(whereCondition)
+			.get();
+
+		return !!accountRow;
+	},
+
+	async generateAddressByBaseName(c, domain, baseName, usedAddressSet) {
+		for (let index = 0; index < MAX_ADDRESS_ATTEMPTS_PER_BASE_NAME; index += 1) {
+			const address = `${this.generatePrefix(baseName)}@${domain}`.toLowerCase();
+
+			if (usedAddressSet.has(address)) {
+				continue;
+			}
+
+			const accountRow = await accountService.selectByEmailIncludeDel(c, address);
+			if (accountRow) {
+				continue;
+			}
+
+			return address;
+		}
+
+		return '';
+	},
+
+	async generateUniqueAddress(c, domain, usedAddressSet, usedBaseNameSet = new Set()) {
+		for (let index = 0; index < MAX_BASE_NAME_ATTEMPTS; index += 1) {
+			const baseName = this.generateBaseName();
+
+			if (usedBaseNameSet.has(baseName)) {
+				continue;
+			}
+
+			const baseNameExists = await this.hasExistingBaseName(c, domain, baseName);
+			if (baseNameExists) {
+				continue;
+			}
+
+			const address = await this.generateAddressByBaseName(c, domain, baseName, usedAddressSet);
+			if (!address) {
+				continue;
+			}
+
+			usedBaseNameSet.add(baseName);
+			usedAddressSet.add(address);
+			return address;
+		}
+
+		for (let index = 0; index < MAX_ADDRESS_FALLBACK_ATTEMPTS; index += 1) {
 			const address = `${this.generatePrefix()}@${domain}`.toLowerCase();
 
 			if (usedAddressSet.has(address)) {

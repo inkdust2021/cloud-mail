@@ -127,7 +127,7 @@ curl -X POST \
 
 单次最多创建 50 个临时邮箱，`expiryDays` 仅支持 `1`、`5`、`7`、`14`、`30`，默认值为 `7`。返回的 `pin_code` 会同时写入该邮箱账号密码，可用于后续登录系统。
 
-创建出的邮箱前缀格式为：**随机英文名 + 1-4 位随机数字**，例如 `olivia23@example.com`、`leo7@example.com`。
+创建出的邮箱前缀格式为：**First name + Last name + 1-4 位随机数字**，例如 `oliviasmith23@example.com`、`liamjohnson7@example.com`。系统会优先避开同域名下已存在的同名组合，尽可能减少重复名字。
 
 请求参数：
 
@@ -154,7 +154,7 @@ curl -X POST \
   "emails": [
     {
       "id": 1,
-      "address": "olivia23@example.com",
+      "address": "oliviasmith23@example.com",
       "pin_code": "482901",
       "expires_at": "2026-03-20T12:00:00.000Z"
     }
@@ -180,7 +180,7 @@ curl -X POST \
 
 ```bash
 curl -H "X-API-Key: your_api_key_here" \
-  "https://your-domain.com/api/public/emails/olivia23%40example.com/messages"
+  "https://your-domain.com/api/public/emails/oliviasmith23%40example.com/messages"
 ```
 
 响应示例：
