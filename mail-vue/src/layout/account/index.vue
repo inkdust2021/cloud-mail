@@ -7,14 +7,53 @@
       <el-tooltip :content="$t('addTempAccount')" placement="bottom">
         <Icon v-perm="'account:add'" class="icon temp" icon="mdi:clock-plus-outline" width="21" height="21" @click="openAddTemp"/>
       </el-tooltip>
+      <el-tooltip :content="multiSelectMode ? $t('cancelSelect') : $t('multiSelect')" placement="bottom">
+        <Icon
+            v-perm="'account:delete'"
+            class="icon multi"
+            :icon="multiSelectMode ? 'mdi:checkbox-marked-outline' : 'mdi:checkbox-blank-outline'"
+            width="20"
+            height="20"
+            @click="toggleMultiSelectMode"
+        />
+      </el-tooltip>
+      <el-tooltip v-if="multiSelectMode" :content="$t('batchDelete')" placement="bottom">
+        <Icon
+            v-perm="'account:delete'"
+            class="icon batch-delete"
+            :class="{ 'icon-disabled': batchDeleting || selectedAccountIds.length === 0 }"
+            icon="mdi:delete-sweep-outline"
+            width="20"
+            height="20"
+            @click="batchRemove"
+        />
+      </el-tooltip>
       <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
+      <div class="selected-count" v-if="multiSelectMode">
+        {{ t('selectedAccountsCount', { msg: selectedAccountIds.length }) }}
+      </div>
     </div>
     <el-scrollbar class="scrollbar" ref="scrollbarRef">
       <div v-infinite-scroll="getAccountList" :infinite-scroll-distance="600" :infinite-scroll-immediate="false">
         <el-card class="item" :class="itemBg(item.accountId)" v-for="(item, index) in accounts" :key="item.accountId"
-                 @click="changeAccount(item)">
+                 @click="handleAccountClick(item)">
           <div class="account">
+            <el-checkbox
+                v-if="multiSelectMode"
+                :model-value="isSelected(item.accountId)"
+                :disabled="item.accountId === userStore.user.account.accountId"
+                @change="() => toggleAccountSelection(item)"
+                @click.stop
+            />
             <div class="account-email">{{ item.email }}</div>
+            <el-tag
+                v-if="multiSelectMode && item.accountId === userStore.user.account.accountId"
+                size="small"
+                type="info"
+                effect="plain"
+            >
+              {{ $t('default') }}
+            </el-tag>
             <el-tag v-if="item.tempMailboxId" size="small" type="warning" effect="plain">{{ $t('tempMailbox') }}</el-tag>
           </div>
           <div class="account-expire" v-if="item.expiresAt">
@@ -201,6 +240,9 @@ const followLoading = ref(false);
 const verifyShow = ref(false)
 const setNameShow = ref(false)
 const setNameLoading = ref(false)
+const multiSelectMode = ref(false)
+const selectedAccountIds = ref([])
+const batchDeleting = ref(false)
 const accountName = ref(null)
 const addRef = ref({})
 const scrollbarRef = ref({})
@@ -340,6 +382,145 @@ function itemBg(accountId) {
   return accountStore.currentAccountId === accountId ? 'item-choose' : ''
 }
 
+function isSelected(accountId) {
+  return selectedAccountIds.value.includes(accountId)
+}
+
+function toggleMultiSelectMode() {
+  multiSelectMode.value = !multiSelectMode.value
+  selectedAccountIds.value = []
+}
+
+function toggleAccountSelection(accountItem) {
+  if (batchDeleting.value) {
+    return
+  }
+
+  if (accountItem.accountId === userStore.user.account.accountId) {
+    ElMessage({
+      message: t('primaryAccountNotSelectable'),
+      type: 'warning',
+      plain: true,
+    })
+    return
+  }
+
+  const selectedIndex = selectedAccountIds.value.findIndex((item) => item === accountItem.accountId)
+  if (selectedIndex > -1) {
+    selectedAccountIds.value.splice(selectedIndex, 1)
+    return
+  }
+
+  selectedAccountIds.value.push(accountItem.accountId)
+}
+
+function handleAccountClick(accountItem) {
+  if (multiSelectMode.value) {
+    toggleAccountSelection(accountItem)
+    return
+  }
+  changeAccount(accountItem)
+}
+
+function removeAccountsFromList(accountIds) {
+  const accountIdSet = new Set(accountIds)
+
+  for (let index = accounts.length - 1; index >= 0; index -= 1) {
+    if (accountIdSet.has(accounts[index].accountId)) {
+      accounts.splice(index, 1)
+    }
+  }
+
+  selectedAccountIds.value = selectedAccountIds.value.filter((item) => !accountIdSet.has(item))
+
+  if (accountIdSet.has(accountStore.currentAccountId)) {
+    if (accounts.length > 0) {
+      changeAccount(accounts[0])
+    } else {
+      accountStore.currentAccountId = 0
+      accountStore.currentAccount = {}
+    }
+    emailStore.emailScroll?.refreshList()
+    emailStore.sendScroll?.refreshList()
+  }
+}
+
+async function deleteAccounts(accountIds) {
+  const normalizedIds = [...new Set(accountIds.map(Number).filter((item) => !Number.isNaN(item)))]
+
+  if (normalizedIds.length === 0) {
+    return {successCount: 0, failedCount: 0}
+  }
+
+  const resultList = await Promise.allSettled(normalizedIds.map((accountId) => accountDelete(accountId)))
+  const successIds = []
+
+  resultList.forEach((result, index) => {
+    if (result.status === 'fulfilled') {
+      successIds.push(normalizedIds[index])
+    }
+  })
+
+  if (successIds.length > 0) {
+    removeAccountsFromList(successIds)
+
+    if (accounts.length < queryParams.size) {
+      getAccountList()
+    }
+  }
+
+  return {
+    successCount: successIds.length,
+    failedCount: normalizedIds.length - successIds.length
+  }
+}
+
+function batchRemove() {
+  if (batchDeleting.value) {
+    return
+  }
+
+  const selectedCount = selectedAccountIds.value.length
+
+  if (selectedCount === 0) {
+    ElMessage({
+      message: t('selectAccountFirst'),
+      type: 'warning',
+      plain: true,
+    })
+    return
+  }
+
+  ElMessageBox.confirm(t('delAccountsConfirm', {msg: selectedCount}), {
+    confirmButtonText: t('confirm'),
+    cancelButtonText: t('cancel'),
+    type: 'warning'
+  }).then(async () => {
+    batchDeleting.value = true
+    const {successCount, failedCount} = await deleteAccounts([...selectedAccountIds.value])
+
+    if (failedCount === 0) {
+      ElMessage({
+        message: t('batchDeleteSuccessMsg', {msg: successCount}),
+        type: 'success',
+        plain: true,
+      })
+    } else {
+      ElMessage({
+        message: t('batchDeleteResultMsg', {success: successCount, failed: failedCount}),
+        type: 'warning',
+        plain: true,
+      })
+    }
+
+    if (selectedAccountIds.value.length === 0) {
+      multiSelectMode.value = false
+    }
+  }).finally(() => {
+    batchDeleting.value = false
+  })
+}
+
 
 
 function remove(account) {
@@ -347,19 +528,15 @@ function remove(account) {
     confirmButtonText: t('confirm'),
     cancelButtonText: t('cancel'),
     type: 'warning'
-  }).then(() => {
-    accountDelete(account.accountId).then(() => {
-      const index = accounts.findIndex(item => item.accountId === account.accountId);
-      accounts.splice(index, 1);
-      if (accounts.length < queryParams.size) {
-        getAccountList()
-      }
+  }).then(async () => {
+    const {successCount} = await deleteAccounts([account.accountId])
+    if (successCount > 0) {
       ElMessage({
         message: t('delSuccessMsg'),
         type: 'success',
         plain: true,
       })
-    })
+    }
   });
 }
 
@@ -370,6 +547,7 @@ function refresh() {
   loading.value = false
   followLoading.value = false
   noLoading.value = false
+  selectedAccountIds.value = []
   queryParams.accountId = 0
   queryParams.lastSort = null
   getSkeletonRows();
@@ -628,6 +806,27 @@ path[fill="#ffdda1"] {
 
     .temp {
       margin-left: 10px;
+    }
+
+    .multi {
+      margin-left: 10px;
+    }
+
+    .batch-delete {
+      margin-left: 10px;
+    }
+
+    .selected-count {
+      margin-left: auto;
+      font-size: 12px;
+      color: var(--secondary-text-color);
+      user-select: none;
+    }
+
+    .icon-disabled {
+      opacity: 0.5;
+      cursor: not-allowed;
+      pointer-events: none;
     }
 
     .head-opt:not(.add) .refresh {
