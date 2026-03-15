@@ -30,7 +30,7 @@ app.get('/user/list', async (c) => {
 });
 
 app.post('/user/add', async (c) => {
-	await userService.add(c, await c.req.json());
+	await userService.add(c, await c.req.json(), userContext.getUserId(c));
 	return c.json(result.ok());
 });
 
@@ -53,5 +53,4 @@ app.delete('/user/deleteAccount', async (c) => {
 	await accountService.physicsDelete(c, c.req.query());
 	return c.json(result.ok());
 });
-
 

@@ -28,6 +28,21 @@
             @click="batchRemove"
         />
       </el-tooltip>
+      <el-tooltip
+          v-if="multiSelectMode"
+          :content="allSelectableSelected ? $t('cancelSelectAllAccounts') : $t('selectAllAccounts')"
+          placement="bottom"
+      >
+        <Icon
+            v-perm="'account:delete'"
+            class="icon select-all"
+            :class="{ 'icon-disabled': batchDeleting || selectableAccountIds.length === 0 }"
+            :icon="allSelectableSelected ? 'mdi:checkbox-multiple-marked' : 'mdi:checkbox-multiple-blank-outline'"
+            width="20"
+            height="20"
+            @click="toggleSelectAll"
+        />
+      </el-tooltip>
       <Icon class="icon refresh" icon="ion:reload" width="18" height="18" @click="refresh"/>
       <div class="selected-count" v-if="multiSelectMode">
         {{ t('selectedAccountsCount', { msg: selectedAccountIds.length }) }}
@@ -202,7 +217,7 @@
 </template>
 <script setup>
 import {Icon} from "@iconify/vue";
-import {nextTick, reactive, ref, watch} from "vue";
+import {computed, nextTick, reactive, ref, watch} from "vue";
 import {
   accountList,
   accountAdd,
@@ -243,6 +258,18 @@ const setNameLoading = ref(false)
 const multiSelectMode = ref(false)
 const selectedAccountIds = ref([])
 const batchDeleting = ref(false)
+const selectableAccountIds = computed(() => {
+  return accounts
+      .filter((item) => item.accountId !== userStore.user.account.accountId)
+      .map((item) => item.accountId)
+})
+const allSelectableSelected = computed(() => {
+  const selectableIds = selectableAccountIds.value
+  if (selectableIds.length === 0) {
+    return false
+  }
+  return selectableIds.every((accountId) => selectedAccountIds.value.includes(accountId))
+})
 const accountName = ref(null)
 const addRef = ref({})
 const scrollbarRef = ref({})
@@ -391,17 +418,30 @@ function toggleMultiSelectMode() {
   selectedAccountIds.value = []
 }
 
+function toggleSelectAll() {
+  if (batchDeleting.value) {
+    return
+  }
+
+  const selectableIds = selectableAccountIds.value
+  if (selectableIds.length === 0) {
+    return
+  }
+
+  if (allSelectableSelected.value) {
+    selectedAccountIds.value = []
+    return
+  }
+
+  selectedAccountIds.value = [...selectableIds]
+}
+
 function toggleAccountSelection(accountItem) {
   if (batchDeleting.value) {
     return
   }
 
   if (accountItem.accountId === userStore.user.account.accountId) {
-    ElMessage({
-      message: t('primaryAccountNotSelectable'),
-      type: 'warning',
-      plain: true,
-    })
     return
   }
 
@@ -813,6 +853,10 @@ path[fill="#ffdda1"] {
     }
 
     .batch-delete {
+      margin-left: 10px;
+    }
+
+    .select-all {
       margin-left: 10px;
     }
 

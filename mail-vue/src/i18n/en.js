@@ -205,6 +205,8 @@ const en = {
     multiSelect: 'Multi Select',
     cancelSelect: 'Exit Multi Select',
     batchDelete: 'Batch Delete',
+    selectAllAccounts: 'Select All',
+    cancelSelectAllAccounts: 'Unselect All',
     selectedAccountsCount: 'Selected {msg}',
     selectAccountFirst: 'Please select at least one address',
     primaryAccountNotSelectable: 'Primary address cannot be batch deleted',

@@ -180,6 +180,7 @@
         </el-input>
         <el-input type="password" v-model="addForm.password" :placeholder="$t('password')"/>
         <el-select v-model="addForm.type" :placeholder="$t('perm')">
+          <el-option v-if="userStore.user.type === 0" :label="$t('admin')" :value="0" :key="0"/>
           <el-option v-for="item in roleList" :label="item.name" :value="item.roleId" :key="item.roleId"/>
         </el-select>
         <el-button class="btn" type="primary" @click="submit" :loading="addLoading"
@@ -729,7 +730,7 @@ function submit() {
     return
   }
 
-  if (!addForm.type) {
+  if (addForm.type === null || typeof addForm.type === 'undefined') {
     ElMessage({
       message: t('emptyRole'),
       type: "error",

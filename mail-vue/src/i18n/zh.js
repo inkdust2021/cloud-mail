@@ -205,6 +205,8 @@ const zh = {
     multiSelect: '多选',
     cancelSelect: '退出多选',
     batchDelete: '批量删除',
+    selectAllAccounts: '全选',
+    cancelSelectAllAccounts: '取消全选',
     selectedAccountsCount: '已选 {msg} 个',
     selectAccountFirst: '请先选择邮箱',
     primaryAccountNotSelectable: '主邮箱不能批量删除',

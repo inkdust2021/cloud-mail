@@ -29,10 +29,12 @@ const userService = {
 			throw new BizError(t('authExpired'), 401);
 		}
 
+		const isAdminUser = c.env.admin === userRow.email || Number(userRow.type) === 0;
+
 		const [account, roleRow, permKeys] = await Promise.all([
 			accountService.selectByEmailIncludeDel(c, userRow.email),
 			roleService.selectById(c, userRow.type),
-			userRow.email === c.env.admin ? Promise.resolve(['*']) : permService.userPermKeys(c, userId)
+			isAdminUser ? Promise.resolve(['*']) : permService.userPermKeys(c, userId)
 		]);
 
 		const user = {};
@@ -45,7 +47,7 @@ const userService = {
 		user.role = roleRow;
 		user.type = userRow.type;
 
-		if (c.env.admin === userRow.email) {
+		if (isAdminUser) {
 			user.role = constant.ADMIN_ROLE
 			user.type = 0;
 		}
@@ -206,7 +208,7 @@ const userService = {
 				sendAction.hasPerm = false;
 			}
 
-			if (user.email === c.env.admin) {
+			if (user.email === c.env.admin || Number(user.type) === 0) {
 				sendAction.sendType = constant.ADMIN_ROLE.sendType;
 				sendAction.sendCount = constant.ADMIN_ROLE.sendCount;
 				sendAction.hasPerm = true;
@@ -302,9 +304,14 @@ const userService = {
 			.run();
 	},
 
-	async add(c, params) {
+	async add(c, params, currentUserId) {
 
 		const { email, type, password } = params;
+		const parsedType = Number(type);
+
+		if (!Number.isInteger(parsedType) || parsedType < 0) {
+			throw new BizError(t('roleNotExist'));
+		}
 
 		if (!c.env.domain.includes(emailUtils.getDomain(email))) {
 			throw new BizError(t('notEmailDomain'));
@@ -324,19 +331,26 @@ const userService = {
 			throw new BizError(t('isRegAccount'));
 		}
 
-		const role = roleService.selectById(c, type);
-
-		if (!role) {
-			throw new BizError(t('roleNotExist'));
+		if (parsedType === 0) {
+			const currentUser = await userService.selectById(c, currentUserId);
+			const canAddAdmin = currentUser && (currentUser.email === c.env.admin || Number(currentUser.type) === 0);
+			if (!canAddAdmin) {
+				throw new BizError(t('unauthorized'), 403);
+			}
+		} else {
+			const role = await roleService.selectById(c, parsedType);
+			if (!role) {
+				throw new BizError(t('roleNotExist'));
+			}
 		}
 
 		const { salt, hash } = await saltHashUtils.hashPassword(password);
 
-		const userId = await userService.insert(c, { email, password: hash, salt, type });
+		const userId = await userService.insert(c, { email, password: hash, salt, type: parsedType });
 
 		await userService.updateUserInfo(c, userId, true);
 
-		await accountService.insert(c, { userId: userId, email, type, name: emailUtils.getName(email) });
+		await accountService.insert(c, { userId: userId, email, type: parsedType, name: emailUtils.getName(email) });
 	},
 
 	async resetDaySendCount(c) {
